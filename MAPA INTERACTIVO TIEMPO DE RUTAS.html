@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mapa de rutas MGS — Zona Oeste USA (Rutas + Oficinas)</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <style>
+    html, body { height: 100%; margin: 0; font-family: system-ui, Arial; }
+    #map { height: 100%; width: 100%; }
+    .ui { position:absolute; top:10px; left:10px; z-index:999; background:rgba(255,255,255,.95); padding:.6rem .8rem; border-radius:.75rem; box-shadow:0 6px 20px rgba(0,0,0,.12); }
+    .ui label { font-size:.85rem; display:block; margin:.25rem 0; }
+    .legend { position:absolute; bottom:10px; left:10px; z-index:999; background:#fff; padding:.6rem .8rem; border-radius:.75rem; box-shadow:0 6px 20px rgba(0,0,0,.12); }
+    .legend .row { display:flex; align-items:center; gap:.5rem; font-size:.85rem; }
+    .pill { display:inline-block; width:18px; height:10px; border-radius:999px; }
+    .label-text { font-weight:700; color:#fff; text-shadow:1px 1px 2px #000; font-size:12px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="ui">
+    <label><input type="checkbox" id="toggleRutas" checked /> Mostrar rutas</label>
+    <label><input type="checkbox" id="toggleOficinas" checked /> Mostrar oficinas</label>
+    <label for="minDays">Filtrar rutas (mín días): <span id="minDaysLabel">0</span></label>
+    <input type="range" id="minDays" min="0" max="20" step="1" value="0" />
+    <label for="search">Buscar ruta</label>
+    <select id="search"></select>
+  </div>
+  <div class="legend">
+    <div class="row"><span class="pill" style="background:#2ECC71"></span> 7–8 días</div>
+    <div class="row"><span class="pill" style="background:#F1C40F"></span> 9–10 días</div>
+    <div class="row"><span class="pill" style="background:#E67E22"></span> 11–12 días</div>
+    <div class="row"><span class="pill" style="background:#E74C3C"></span> 13+ días</div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script>
+    const routes = [
+      { id: "R01", nombre: "Cualquier Oficina → Bodega principal (Sylmar)", dias: 8, coords: [[34.0522,-118.2437],[34.3071,-118.4493]], notas: "Tiempo estimado desde que dejas tu caja en cualquier oficina hasta que llega a la bodega principal y sale a México." },
+      { id: "R02", nombre: "Oxnard → Bodega", dias: 8, coords: [[34.1975,-119.1771],[34.3071,-118.4493]] },
+      { id: "R03", nombre: "Santa Ana → Bodega", dias: 7, coords: [[33.7455,-117.8677],[34.3071,-118.4493]] },
+      { id: "R04", nombre: "Los Ángeles → Bodega", dias: 8, coords: [[34.0522,-118.2437],[34.3071,-118.4493]] },
+      { id: "R05", nombre: "Fresno → Bodega", dias: 8, coords: [[36.7378,-119.7871],[34.3071,-118.4493]] },
+      { id: "R06", nombre: "Bakersfield → Bodega", dias: 8, coords: [[35.3733,-119.0187],[34.3071,-118.4493]] },
+      { id: "R07", nombre: "Paso Robles → Bodega", dias: 8, coords: [[35.6266,-120.6910],[34.3071,-118.4493]] },
+      { id: "R08", nombre: "Sacramento → Bodega", dias: 8, coords: [[38.5816,-121.4944],[34.3071,-118.4493]] },
+      { id: "R09", nombre: "Van Nuys → Bodega", dias: 9, coords: [[34.1867,-118.4495],[34.3071,-118.4493]] },
+      { id: "R10", nombre: "San José → Bodega", dias: 9, coords: [[37.3382,-121.8863],[34.3071,-118.4493]] },
+      { id: "R11", nombre: "San Francisco → Bodega", dias: 9, coords: [[37.7749,-122.4194],[34.3071,-118.4493]] },
+      { id: "R12", nombre: "Salinas → Bodega", dias: 9, coords: [[36.6777,-121.6555],[34.3071,-118.4493]] },
+      { id: "R13", nombre: "Riverside → Bodega", dias: 9, coords: [[33.9806,-117.3755],[34.3071,-118.4493]] },
+      { id: "R14", nombre: "Antioch → Bodega", dias: 9, coords: [[38.0049,-121.8058],[34.3071,-118.4493]] },
+      { id: "R15", nombre: "Merced → Bodega", dias: 9, coords: [[37.3022,-120.4820],[34.3071,-118.4493]] },
+      { id: "R16", nombre: "Coachella → Bodega", dias: 9, coords: [[33.6803,-116.1739],[34.3071,-118.4493]] },
+      { id: "R17", nombre: "Santa Rosa → Bodega", dias: 10, coords: [[38.4405,-122.7144],[34.3071,-118.4493]] },
+      { id: "R18", nombre: "Reno → Bodega", dias: 10, coords: [[39.5296,-119.8138],[34.3071,-118.4493]] },
+      { id: "R19", nombre: "Las Vegas → Bodega", dias: 10, coords: [[36.1699,-115.1398],[34.3071,-118.4493]] },
+      { id: "R20", nombre: "Oregón (Portland) → Bodega", dias: 11, coords: [[45.5152,-122.6784],[34.3071,-118.4493]] },
+      { id: "R21", nombre: "Utah (Salt Lake City) → Bodega", dias: 12, coords: [[40.7608,-111.8910],[34.3071,-118.4493]] },
+      { id: "R22", nombre: "Arizona (Phoenix) → Bodega", dias: 12, coords: [[33.4484,-112.0740],[34.3071,-118.4493]] },
+      { id: "R23", nombre: "Washington (Seattle) → Bodega", dias: 13, coords: [[47.6062,-122.3321],[34.3071,-118.4493]] }
+    ];
+
+    const ciudades = [
+      { nombre: "Simi Valley", abrev: "SIM", dias: 8, coords: [34.2694, -118.7815], direccion: "1357 E Los Angeles Ave, Simi Valley, CA 93065" },
+      { nombre: "Portland", abrev: "PDX", dias: 11, coords: [45.5152, -122.6784], direccion: "14919 SE Stark ST Suite 108, Portland, OR 97233" },
+      { nombre: "Sylmar (Bodega principal)", abrev: "SYL", dias: 8, coords: [34.3071, -118.4493], direccion: "12843 Foothill Blvd Unit C, Sylmar, CA 91342" },
+      { nombre: "Sacramento", abrev: "SAC", dias: 8, coords: [38.5816, -121.4944], direccion: "2501 del Paso Blvd, Sacramento, CA 95815" },
+      { nombre: "San Jose", abrev: "SJO", dias: 9, coords: [37.3382, -121.8863], direccion: "1430 Tully RD Suit 406, San Jose, CA 95122" },
+      { nombre: "Fresno", abrev: "FRE", dias: 8, coords: [36.7378, -119.7871], direccion: "5816 E Shields Ave #110, Fresno, CA 93727" },
+      { nombre: "Oxnard", abrev: "OXN", dias: 8, coords: [34.1975, -119.1771], direccion: "1207 Saviers Rd, Oxnard, CA 93030" },
+      { nombre: "Las Vegas", abrev: "LV", dias: 10, coords: [36.1699, -115.1398], direccion: "4555 E Charleston Blvd Unit 104, Las Vegas, NV 89104" }
+    ];
+
+    function colorPorDias(d) {
+      if (d <= 8) return '#2ECC71'; // Verde para 7-8 días
+      if (d <= 10) return '#F1C40F'; // Amarillo para 9-10 días
+      if (d <= 12) return '#E67E22'; // Naranja para 11-12 días
+      return '#E74C3C'; // Rojo para 13+ días
+    }
+
+    const map = L.map('map').setView([38, -120], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
+
+    const layerRutas = L.layerGroup().addTo(map);
+    const layerCiudades = L.layerGroup().addTo(map);
+
+    function renderRutas(minDays=0){
+      layerRutas.clearLayers();
+      const visibles = [];
+      routes.forEach(r=>{
+        if(r.dias < minDays) return;
+        const poly = L.polyline(r.coords,{color:colorPorDias(r.dias), weight:5, opacity:.9}).addTo(layerRutas);
+        poly.bindPopup(`<b>${r.nombre}</b><br/>Tiempo a salida a MX: <b>${r.dias} día(s)</b>${r.notas?`<br/>${r.notas}`:''}`);
+        visibles.push(poly);
+        L.circleMarker(r.coords[0],{radius:6,weight:2,color:'#34495E',fillColor:'#fff',fillOpacity:1}).bindTooltip('Inicio recolección').addTo(layerRutas);
+        L.circleMarker(r.coords[r.coords.length-1],{radius:6,weight:2,color:'#34495E',fillColor:colorPorDias(r.dias),fillOpacity:1}).bindTooltip('Bodega principal en Sylmar').addTo(layerRutas);
+      });
+      if(visibles.length){
+        const group = L.featureGroup(visibles);
+        map.fitBounds(group.getBounds().pad(0.2));
+      }
+    }
+
+    function renderCiudades(){
+      layerCiudades.clearLayers();
+      ciudades.forEach(c=>{
+        const cm = L.circleMarker(c.coords,{radius:20,fillColor:colorPorDias(c.dias),color:'#333',weight:2,opacity:1,fillOpacity:.8}).addTo(layerCiudades);
+        cm.bindPopup(`<b>${c.nombre}</b><br/>Tiempo a bodega: ${c.dias} día(s)<br/>Dirección: ${c.direccion||'—'}`);
+        const label = L.divIcon({html:`<div class='label-text'>${c.abrev} ${c.dias}</div>`, className:'', iconSize:[40,20]});
+        L.marker(c.coords,{icon:label}).addTo(layerCiudades);
+      });
+    }
+
+    renderRutas();
+    renderCiudades();
+
+    const minDaysInput = document.getElementById('minDays');
+    const minDaysLabel = document.getElementById('minDaysLabel');
+    minDaysInput.addEventListener('input', e=>{ minDaysLabel.textContent = e.target.value; renderRutas(Number(e.target.value)); });
+
+    const searchSelect = document.getElementById('search');
+    searchSelect.innerHTML = '<option value="">— Buscar ruta —</option>';
+    routes.forEach(r=>{ const opt=document.createElement('option'); opt.value=r.id; opt.textContent=`${r.id} · ${r.nombre}`; searchSelect.appendChild(opt); });
+    searchSelect.addEventListener('change', e=>{ const id=e.target.value; if(!id) return; const r=routes.find(x=>x.id===id); if(!r) return; const poly=L.polyline(r.coords); map.fitBounds(poly.getBounds().pad(0.3)); const mid=r.coords[Math.floor(r.coords.length/2)]; L.popup().setLatLng(mid).setContent(`<b>${r.nombre}</b><br/>Salida a MX: <b>${r.dias} día(s)</b>`).openOn(map); });
+
+    document.getElementById('toggleRutas').addEventListener('change', (e)=>{ if(e.target.checked){ map.addLayer(layerRutas);} else { map.removeLayer(layerRutas);} });
+    document.getElementById('toggleOficinas').addEventListener('change', (e)=>{ if(e.target.checked){ map.addLayer(layerCiudades);} else { map.removeLayer(layerCiudades);} });
+  </script>
+</body>
+</html>
